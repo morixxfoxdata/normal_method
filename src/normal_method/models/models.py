@@ -140,7 +140,7 @@ if __name__ == "__main__":
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 10000
+    num_epochs = 20000
     # 利用スペックル
     selected_speckle = S_nn
     # 標準化の有無
@@ -169,5 +169,5 @@ if __name__ == "__main__":
     # 再構成の精度評価
     mse = mean_squared_error(XX, nd_recon)
     print(f"Average reconstruction MSE: {mse:.4f}")
-    print(nd_recon[0], nd_recon.min(), nd_recon.max())
-    image_display(j=2, xx=XX, yy=nd_recon, size=8)
+    print(nd_recon.min(), nd_recon.max())
+    image_display(j=8, xx=XX, yy=nd_recon, size=8)

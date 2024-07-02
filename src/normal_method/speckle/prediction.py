@@ -87,7 +87,7 @@ def Original_pred():
     optimizer = optim.Adam(list(model.parameters()) + [criterion.Delta_S], lr=0.0001)
 
     # モデルの訓練
-    num_epochs = 20000
+    num_epochs = 40000
     for epoch in range(num_epochs):
         model.train()
         optimizer.zero_grad()
