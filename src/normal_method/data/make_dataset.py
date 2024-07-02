@@ -11,15 +11,18 @@ print(using_data["arr_0"].shape)
 print(collection_data["arr_0"].shape)
 
 
-def load_data(using_data_path, collection_data_path):
-    using_data = np.load(using_data_path)
-    collection_data = np.load(collection_data_path)
+def load_data():
+    file_path = "data/raw/HP_mosaic_random_size8x8_image64+10+500_alternate.npz"
+    collection = "data/raw/HP+mosaic+rand_image64+10+500_size8x8_alternate_200x20020240618_collect.npz"
+    using_data = np.load(file_path)
+    collection_data = np.load(collection)
     X = using_data["arr_0"]
     y = collection_data["arr_0"]
     return X, y
 
 
-def hadamard_total(X, y):
+def hadamard_total():
+    X, y = load_data()
     X_hadamard = X[:128, :]
     y_hadamard = y[:128, :]
     # 取得アダマールパターンの偶数列のみを利用する
@@ -37,7 +40,8 @@ def hadamard_total(X, y):
     return X_hadamard_total, y_hadamard_total
 
 
-def random_total(X, y):
+def random_total():
+    X, y = load_data()
     X_random = X[148:, :]
     y_random = y[148:, :]
     # 取得ランダムパターンをskipして500に縮小する
@@ -55,7 +59,8 @@ def random_total(X, y):
     return X_random_total, y_random_total
 
 
-def mnist_total(X, y):
+def mnist_total():
+    X, y = load_data()
     X_mnist = X[128:148, :]
     y_mnist = y[128:148, :]
 

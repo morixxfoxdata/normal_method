@@ -9,5 +9,15 @@
 #   generate-hashes: false
 
 -e file:.
+joblib==1.4.2
+    # via scikit-learn
 numpy==2.0.0
     # via normal-method
+    # via scikit-learn
+    # via scipy
+scikit-learn==1.5.0
+    # via normal-method
+scipy==1.14.0
+    # via scikit-learn
+threadpoolctl==3.5.0
+    # via scikit-learn
