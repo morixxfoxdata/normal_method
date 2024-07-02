@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -79,15 +80,16 @@ def Original_pred():
         X_random, y_random, test_size=0.1, shuffle=False
     )
     # parameter
-    lambda1 = 0.1
-    lambda2 = 0.1
+    lambda1 = 0.001
+    lambda2 = 0.001
 
     # 損失関数の定義
     criterion = CustomLoss(S_hd, lambda1, lambda2)
     optimizer = optim.Adam(list(model.parameters()) + [criterion.Delta_S], lr=0.0001)
 
     # モデルの訓練
-    num_epochs = 40000
+    num_epochs = 100
+    loss_list = []
     for epoch in range(num_epochs):
         model.train()
         optimizer.zero_grad()
@@ -95,7 +97,8 @@ def Original_pred():
         loss = criterion(y_train1, y_pred, X_train1)
         loss.backward()
         optimizer.step()
-        if (epoch + 1) % 100 == 0:
+        loss_list.append(loss.item())
+        if (epoch + 1) % 10 == 0:
             print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.6f}")
     # 予測
     model.eval()
@@ -110,4 +113,8 @@ def Original_pred():
 
 
 if __name__ == "__main__":
-    Original_pred()
+    S, loss_list = Original_pred()
+    loss_list = np.array(loss_list)
+    print(loss_list.shape)
+    plt.plot(loss_list)
+    plt.show()
