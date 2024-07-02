@@ -5,11 +5,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import wandb
 from sklearn.metrics import mean_squared_error
 
 from src.normal_method.data import mnist_total
 from src.normal_method.speckle.prediction import Original_pred
 from src.normal_method.visualization.display import image_display
+
+wandb.login()
+
+wandb.init(project="speckle")
 
 
 class Net_version_1(nn.Module):
@@ -73,7 +78,7 @@ def training_network(
         optimizer.step()
 
         loss_list.append(loss.item())
-
+        wandb.log({"epoch": epoch, "loss": loss.item()})
         if (epoch + 1) % 100 == 0:
             print(f"Epoch: [{epoch+1}/{num_epochs}], Loss: {loss.item():.6f}")
 
@@ -122,7 +127,9 @@ def main_train(
         loss_total.append(loss_list)
         reconstructed_total.append(reconstructed_x.cpu().numpy())
         elapsed_time = time.time() - start_time
-
+        wandb.log(
+            {"iteration": i + 1, "final_loss": loss_list[-1], "time": elapsed_time}
+        )
         # if i == 0 or (i + 1) % 100 == 0:
         print(
             f"Iteration: {i+1}/{num_images}, Final Loss: {loss_list[-1]:.4f}, Time: {elapsed_time}"
@@ -150,6 +157,15 @@ if __name__ == "__main__":
     speckle = S_nn.T
     print(yy.shape)
     print(speckle.shape)
+    # wandbに設定をログ
+    wandb.config.update(
+        {
+            "num_images": num_images,
+            "num_epochs": num_epochs,
+            "learning_rate": learning_rate,
+            "model": selected_model.get_class_name(),
+        }
+    )
     """
     訓練
     """
@@ -171,3 +187,8 @@ if __name__ == "__main__":
     print(f"Average reconstruction MSE: {mse:.4f}")
     print(nd_recon.min(), nd_recon.max())
     image_display(j=8, xx=XX, yy=nd_recon, size=8)
+    # wandbに最終結果をログ
+    wandb.log(
+        {"final_average_loss": np.mean([loss[-1] for loss in loss_history]), "mse": mse}
+    )
+    wandb.finish()
