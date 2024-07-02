@@ -5,7 +5,9 @@ description = "Add your description here"
 authors = [
     { name = "morixxfoxdata", email = "morixx.datascience@gmail.com" }
 ]
-dependencies = []
+dependencies = [
+    "numpy>=2.0.0",
+]
 readme = "README.md"
 requires-python = ">= 3.8"
 

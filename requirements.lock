@@ -9,3 +9,5 @@
 #   generate-hashes: false
 
 -e file:.
+numpy==2.0.0
+    # via normal-method
