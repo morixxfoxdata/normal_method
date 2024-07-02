@@ -54,7 +54,7 @@ def mnist_total():
     X_mnist = X[128:148, :]
     y_mnist = y[128:148, :]
 
-    X_mnist = X_mnist[:, ::2]
+    y_mnist = y_mnist[:, ::2]
     # MNISTデータの色反転データをそれぞれ格納
     X_mnist_1 = X_mnist[0::2, :]
     X_mnist_2 = X_mnist[1::2, :]
