@@ -25,14 +25,14 @@ def random_pattern_split():
 
     y_train1 = y_train[0 : int(X_train.shape[0] / 2), :]
     y_train2 = y_train[int(X_train.shape[0] / 2) :, :]
-    return X_train1, y_train1, X_train2, y_train2
+    return X_train1, X_train2, y_train1, y_train2
 
 
 def speckle_noise_calculation(S):
-    _, x_train2, _, y_train2 = random_pattern_split()
-    delta = y_train2 - np.dot(x_train2, S.T)
+    _, X_train2, _, y_train2 = random_pattern_split()
+    delta = y_train2 - np.dot(X_train2, S.T)
     delta_Ridge = Ridge(alpha=0.001)
-    delta_Ridge.fit(x_train2, delta)
+    delta_Ridge.fit(X_train2, delta)
     delta_ridge_coef = delta_Ridge.coef_
     predicted_speckle = S + delta_ridge_coef
     # speckle.shape: (500, 64)

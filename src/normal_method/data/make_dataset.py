@@ -7,8 +7,8 @@ collection = "data/raw/HP+mosaic+rand_image64+10+500_size8x8_alternate_200x20020
 using_data = np.load(file_path)
 collection_data = np.load(collection)
 
-print(using_data["arr_0"].shape)
-print(collection_data["arr_0"].shape)
+# print(using_data["arr_0"].shape)
+# print(collection_data["arr_0"].shape)
 
 
 def load_data():
