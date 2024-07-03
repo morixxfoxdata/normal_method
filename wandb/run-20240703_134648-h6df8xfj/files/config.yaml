@@ -40,4 +40,4 @@ learning_rate:
   value: 1.0e-05
 model:
   desc: null
-  value: Net_version_1
+  value: Net_

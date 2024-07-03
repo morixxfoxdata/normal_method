@@ -145,7 +145,7 @@ if __name__ == "__main__":
     ### スペックル切り替え
     lambda1 = 10
     lambda2 = 10
-    speckle_alpha = 1
+    speckle_alpha = 3
     # S_org = Original_pred(lambda1=lambda1, lambda2=lambda2)
     S_norm = speckle_noise_calculation(S_hd, alpha=speckle_alpha)
     """
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 40000
+    num_epochs = 20000
     # 利用スペックル
     # selected_speckle = S
     # 標準化の有無

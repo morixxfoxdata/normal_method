@@ -110,12 +110,4 @@ def Original_pred(lambda1, lambda2):
     # # print("Predicted values:", y_pred.view(-1).numpy())
     # # print("Estimated Delta_S:", del_S.shape)
 
-    # display_image_random(4, S_hd, X_test, y_test)
-
-
-if __name__ == "__main__":
-    S, loss_list = Original_pred(lambda1=0.1, lambda2=0.1)
-    loss_list = np.array(loss_list)
-    print(loss_list.shape)
-    plt.plot(loss_list)
-    plt.show()
+    # display_image_random(4, S_hd, X_test
