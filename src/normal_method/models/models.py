@@ -143,9 +143,11 @@ def main_train(
 if __name__ == "__main__":
     S_hd = inv_hadamard()
     ### スペックル切り替え
-    # S = Original_pred()
-    speckle_alpha = 1000
-    S = speckle_noise_calculation(S_hd, alpha=speckle_alpha)
+    lambda1 = 10
+    lambda2 = 10
+    speckle_alpha = 1
+    # S_org = Original_pred(lambda1=lambda1, lambda2=lambda2)
+    S_norm = speckle_noise_calculation(S_hd, alpha=speckle_alpha)
     """
     パラメータ、データ設定
     """
@@ -154,14 +156,14 @@ if __name__ == "__main__":
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 10000
+    num_epochs = 40000
     # 利用スペックル
     # selected_speckle = S
     # 標準化の有無
     normalized = False
     learning_rate = 5 * 1e-5
     XX, yy = mnist_total()
-    speckle = S.T
+    speckle = S_norm.T
     print(yy.shape)
     print(speckle.shape)
     # wandbに設定をログ

@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -32,7 +33,7 @@ def random_pattern_split():
     return X_train1, X_train2, y_train1, y_train2
 
 
-def speckle_noise_calculation(S, alpha=1000):
+def speckle_noise_calculation(S, alpha=1):
     _, X_train2, _, y_train2 = random_pattern_split()
     delta = y_train2 - np.dot(X_train2, S.T)
     delta_Ridge = Ridge(alpha=alpha)
@@ -67,7 +68,7 @@ class SimpleLinearModel(nn.Module):
         return self.linear(x)
 
 
-def Original_pred():
+def Original_pred(lambda1, lambda2):
     X_train1, X_train2, y_train1, y_train2 = random_pattern_split()
     y_train1 = y_train1.T
     X_train1 = torch.tensor(X_train1, dtype=torch.float32)
@@ -80,12 +81,12 @@ def Original_pred():
         X_random, y_random, test_size=0.1, shuffle=False
     )
     # parameter
-    lambda1 = 0.001
-    lambda2 = 0.001
+    lambda1 = lambda1
+    lambda2 = lambda2
 
     # 損失関数の定義
     criterion = CustomLoss(S_hd, lambda1, lambda2)
-    optimizer = optim.Adam(list(model.parameters()) + [criterion.Delta_S], lr=0.0001)
+    optimizer = optim.Adam(list(model.parameters()) + [criterion.Delta_S], lr=0.00005)
 
     # モデルの訓練
     num_epochs = 100
@@ -99,22 +100,22 @@ def Original_pred():
         optimizer.step()
         loss_list.append(loss.item())
         if (epoch + 1) % 10 == 0:
-            print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.6f}")
+            print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {1000*loss.item():.6f}")
     # 予測
     model.eval()
     with torch.no_grad():
         y_pred = model(X_train1)
     del_S = criterion.Delta_S.detach().numpy()
-    return S_hd - del_S
+    return S_hd - del_S, loss_list
     # # print("Predicted values:", y_pred.view(-1).numpy())
     # # print("Estimated Delta_S:", del_S.shape)
 
     # display_image_random(4, S_hd, X_test, y_test)
 
 
-# if __name__ == "__main__":
-# S = Original_pred()
-# loss_list = np.array(loss_list)
-# print(loss_list.shape)
-# plt.plot(loss_list)
-# plt.show()
+if __name__ == "__main__":
+    S, loss_list = Original_pred(lambda1=0.1, lambda2=0.1)
+    loss_list = np.array(loss_list)
+    print(loss_list.shape)
+    plt.plot(loss_list)
+    plt.show()
