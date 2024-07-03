@@ -1,126 +1,56 @@
 import matplotlib.pyplot as plt
-import torch
-import torch.nn as nn
-import torch.optim as optim
+import numpy as np
+from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 
 from src.normal_method.data import random_total
 from src.normal_method.speckle.prediction import inv_hadamard
 
-X, y = random_total()
-# print(X_random.shape, y_random.shape)   # (500, 64) (500, 500)
-# 訓練、検証、テストデータに分割
-# 訓練、検証、テストデータに分割
-X_train, X_temp, y_train, y_temp = train_test_split(
-    X, y, test_size=0.4, random_state=42
+X_random, y_random = random_total()
+X_train, X_test, y_train, y_test = train_test_split(
+    X_random, y_random, test_size=0.1, shuffle=False
 )
-X_val, X_test, y_val, y_test = train_test_split(
-    X_temp, y_temp, test_size=0.5, random_state=42
-)
+S_hd = inv_hadamard()
 
-# PyTorchのテンソルに変換
-X_train = torch.tensor(X_train, dtype=torch.float32)
-y_train = torch.tensor(y_train, dtype=torch.float32)
-X_val = torch.tensor(X_val, dtype=torch.float32)
-y_val = torch.tensor(y_val, dtype=torch.float32)
-X_test = torch.tensor(X_test, dtype=torch.float32)
-y_test = torch.tensor(y_test, dtype=torch.float32)
+delta = y_train - np.dot(X_train, S_hd.T)
+delta_ridge = Ridge(alpha=5000, solver="sparse_cg", max_iter=10000000)
+delta_ridge.fit(X_train, delta)
+delta_ridge_coef = delta_ridge.coef_
+pred_S = S_hd + delta_ridge_coef
 
 
-class DeltaSModel(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(DeltaSModel, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_size, output_size)
+def inverse_mat(j, sp, target_train, y_train, target_test, y_test):
+    aa = np.linalg.pinv(sp)
+    bb = np.dot(aa, y_train.T).T
+    bb_test = np.dot(aa, y_test.T).T
+    fig = plt.figure(figsize=(10, 4 * j))
+    for i in range(j):
+        ax1 = fig.add_subplot(j, 2, i * 2 + 1)
+        ax2 = fig.add_subplot(j, 2, i * 2 + 2)
 
-    def forward(self, x):
-        out = self.fc1(x)
-        out = self.relu(out)
-        out = self.fc2(out)
-        return out
+        ax1.set_title("Target_image")
+        ax2.set_title("Reconstruction")
 
+        ax1.imshow(target_train[i, :].reshape(8, 8), cmap="gray", vmin=-1, vmax=1)
+        ax2.imshow(bb[i, :].reshape(8, 8), cmap="gray")
 
-class CustomLoss(nn.Module):
-    def __init__(self, lambda1, lambda2, S0):
-        super(CustomLoss, self).__init__()
-        self.lambda1 = lambda1
-        self.lambda2 = lambda2
-        self.S0 = torch.tensor(S0, dtype=torch.float32)
-
-    def forward(self, y_pred, y_true, x, delta_S):
-        S0_device = self.S0.to(delta_S.device)
-        term1 = torch.sum((y_true - torch.matmul((S0_device + delta_S), x.T).T) ** 2)
-        term2 = self.lambda1 * torch.sum(delta_S**2)
-        term3 = self.lambda2 * torch.sum(torch.abs(x))
-        return term1 + term2 + term3
+    print(
+        "Train MSE =",
+        mean_squared_error(target_train, bb),
+        "\n",
+        "Test MSE =",
+        mean_squared_error(target_test, bb_test),
+    )
 
 
-input_size = X_train.shape[1]  # 64
-hidden_size = 128  # 任意の値、調整可能
-output_size = y_train.shape[1]  # 500
-S0 = inv_hadamard()
-
-model = DeltaSModel(input_size, hidden_size, output_size)
-
-# ハイパーパラメータの設定
-lambda1 = 0.1
-lambda2 = 0.1
-
-criterion = CustomLoss(lambda1, lambda2, S0)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-num_epochs = 100
-train_losses = []
-val_losses = []
-
-for epoch in range(num_epochs):
-    model.train()
-    optimizer.zero_grad()
-
-    # 順伝播
-    outputs = model(X_train)
-    delta_S = model.fc2.weight  # モデルの重みをΔSとする
-
-    # カスタム損失関数の計算
-    loss = criterion(outputs, y_train, X_train, delta_S)
-
-    # 逆伝播と最適化
-    loss.backward()
-    optimizer.step()
-
-    train_losses.append(loss.item())
-
-    # 検証データでのパフォーマンス評価
-    model.eval()
-    with torch.no_grad():
-        val_outputs = model(X_val)
-        val_loss = criterion(val_outputs, y_val, X_val, delta_S)
-        val_losses.append(val_loss.item())
-
-    if (epoch + 1) % 10 == 0:
-        print(
-            f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}, Val Loss: {val_loss.item():.4f}"
-        )
-
-model.eval()
-with torch.no_grad():
-    test_outputs = model(X_test)
-    delta_S = model.fc2.weight  # モデルの重みをΔSとする
-    test_loss = criterion(test_outputs, y_test, X_test, delta_S)
-    print(f"Test Loss: {test_loss.item():.4f}")
-
-    # 必要に応じて、さらに詳細な評価を行う
-    test_outputs_np = test_outputs.numpy()
-    y_test_np = y_test.numpy()
-    mse = mean_squared_error(y_test_np, test_outputs_np)
-    print(f"Test MSE: {mse:.4f}")
+def inverse_mat_arr(sp, target, yy):
+    aa = np.dot(sp, target.T).T
+    print("MSE =", mean_squared_error(yy, aa))
 
 
-plt.plot(train_losses, label="Training Loss")
-plt.plot(val_losses, label="Validation Loss")
-plt.xlabel("Epoch")
-plt.ylabel("Loss")
-plt.legend()
-plt.show()
+if __name__ == "__main__":
+    inverse_mat(4, pred_S, X_train, y_train, X_test, y_test)
+    # inverse_mat_arr(pred_S, X_test, y_test)
+    # plt.tight_layout()
+    plt.show()
