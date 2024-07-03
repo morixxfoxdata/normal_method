@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -112,9 +111,9 @@ def Original_pred():
     # display_image_random(4, S_hd, X_test, y_test)
 
 
-if __name__ == "__main__":
-    S, loss_list = Original_pred()
-    loss_list = np.array(loss_list)
-    print(loss_list.shape)
-    plt.plot(loss_list)
-    plt.show()
+# if __name__ == "__main__":
+# S = Original_pred()
+# loss_list = np.array(loss_list)
+# print(loss_list.shape)
+# plt.plot(loss_list)
+# plt.show()

@@ -5,11 +5,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import wandb
 from sklearn.metrics import mean_squared_error
 
+import wandb
 from src.normal_method.data import mnist_total
-from src.normal_method.speckle.prediction import Original_pred
+from src.normal_method.speckle.prediction import (
+    inv_hadamard,
+    speckle_noise_calculation,
+)
 from src.normal_method.visualization.display import image_display
 
 wandb.login()
@@ -138,7 +141,9 @@ def main_train(
 
 
 if __name__ == "__main__":
-    S_nn = Original_pred()
+    S_hd = inv_hadamard()
+    # S_nn = Original_pred()
+    S = speckle_noise_calculation(S_hd)
     """
     パラメータ、データ設定
     """
@@ -149,12 +154,12 @@ if __name__ == "__main__":
     # 画像ごとのエポック数
     num_epochs = 20000
     # 利用スペックル
-    selected_speckle = S_nn
+    selected_speckle = S
     # 標準化の有無
     normalized = False
     learning_rate = 1 * 1e-5
     XX, yy = mnist_total()
-    speckle = S_nn.T
+    speckle = S.T
     print(yy.shape)
     print(speckle.shape)
     # wandbに設定をログ
