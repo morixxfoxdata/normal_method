@@ -142,8 +142,10 @@ def main_train(
 
 if __name__ == "__main__":
     S_hd = inv_hadamard()
-    # S_nn = Original_pred()
-    S = speckle_noise_calculation(S_hd)
+    ### スペックル切り替え
+    # S = Original_pred()
+    speckle_alpha = 1000
+    S = speckle_noise_calculation(S_hd, alpha=speckle_alpha)
     """
     パラメータ、データ設定
     """
@@ -152,12 +154,12 @@ if __name__ == "__main__":
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 20000
+    num_epochs = 10000
     # 利用スペックル
-    selected_speckle = S
+    # selected_speckle = S
     # 標準化の有無
     normalized = False
-    learning_rate = 1 * 1e-5
+    learning_rate = 5 * 1e-5
     XX, yy = mnist_total()
     speckle = S.T
     print(yy.shape)
@@ -165,6 +167,7 @@ if __name__ == "__main__":
     # wandbに設定をログ
     wandb.config.update(
         {
+            "speckle_alpha": speckle_alpha,
             "num_images": num_images,
             "num_epochs": num_epochs,
             "learning_rate": learning_rate,
