@@ -214,7 +214,7 @@ if __name__ == "__main__":
     パラメータ、データ設定
     """
     # 利用モデル
-    selected_model = Net_version_1()
+    selected_model = Net_version_2()
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
@@ -223,7 +223,7 @@ if __name__ == "__main__":
     # selected_speckle = S
     # 標準化の有無
     normalized = False
-    learning_rate = 5 * 1e-5
+    learning_rate = 1 * 1e-5
     XX, yy = mnist_total()
     # S_norm_stand = standardization(S_norm)
     speckle = S_norm.T
@@ -260,13 +260,13 @@ if __name__ == "__main__":
     nd_loss = np.array(loss_history)
     # 再構成の精度評価
     mse = mean_squared_error(XX, nd_recon)
-    mse_bin = mean_squared_error(XX, nd_binary)
-    print(f"Average reconstruction MSE: {mse:.4f}, {mse_bin:.4f}")
+    # mse_bin = mean_squared_error(XX, nd_binary)
+    print(f"Average reconstruction MSE: {mse:.4f}")
     print(nd_recon.min(), nd_recon.max())
-    print(nd_binary.min(), nd_binary.max())
+    # print(nd_binary.min(), nd_binary.max())
     # np.save("data/processed/reconstructed_signals.npy", nd_recon)
     image_display(j=8, xx=XX, yy=nd_recon, size=8)
-    image_display(j=8, xx=XX, yy=nd_binary, size=8)
+    # image_display(j=8, xx=XX, yy=nd_binary, size=8)
     # wandbに最終結果をログ
     # wandb.log(
     #     {"final_average_loss": np.mean([loss[-1] for loss in loss_history]), "mse": mse}
