@@ -4,14 +4,12 @@ from typing import List, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from sklearn.metrics import mean_squared_error
 
 import wandb
 from src.normal_method.data import mnist_total
-
-# 先ほど定義したSSIMクラスをインポートしたと仮定します
-# from src.normal_method.models.ssim_model import SSIM
 from src.normal_method.speckle.prediction import (
     inv_hadamard,
     speckle_noise_calculation,
@@ -21,13 +19,6 @@ from src.normal_method.visualization.display import image_display
 wandb.login()
 
 wandb.init(project="speckle")
-
-
-def standardization(data: np.ndarray) -> np.ndarray:
-    """
-    標準化
-    """
-    return (data - data.mean()) / data.std()
 
 
 class Net_version_1(nn.Module):
@@ -70,30 +61,83 @@ class Net_version_2(nn.Module):
         return self.__class__.__name__
 
 
-class Net_version_3(nn.Module):
-    def __init__(self):
-        super(Net_version_3, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(500, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
+class SSIM(nn.Module):
+    def __init__(self, window_size=11, size_average=True):
+        super(SSIM, self).__init__()
+        self.window_size = window_size
+        self.size_average = size_average
+        self.channel = 1
+        self.window = self.create_window(window_size)
+
+    def forward(self, img1, img2):
+        (_, channel, _, _) = img1.size()
+
+        if channel == self.channel and self.window.data.type() == img1.data.type():
+            window = self.window
+        else:
+            window = (
+                self.create_window(self.window_size).to(img1.device).type(img1.dtype)
+            )
+            self.window = window
+
+        return self._ssim(
+            img1, img2, window, self.window_size, channel, self.size_average
         )
-        self.decoder = nn.Sequential(nn.Linear(128, 256), nn.ReLU(), nn.Linear(256, 64))
 
-    def forward(self, x):
-        encoded = self.encoder(x)
-        logits = self.decoder(encoded)
-        return logits
+    def create_window(self, window_size):
+        _1D_window = self.gaussian(window_size, 1.5).unsqueeze(1)
+        _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
+        return _2D_window
 
-    def get_binary_output(self, x):
-        logits = self(x)
-        return torch.sign(logits)  # -1 または 1 を返す
+    def gaussian(self, window_size, sigma):
+        coords = torch.arange(window_size).float() - window_size // 2
+        g = torch.exp(-(coords**2) / (2 * sigma**2))
+        return g / g.sum()
 
-    def get_class_name(self):
-        return self.__class__.__name__
+    def _ssim(self, img1, img2, window, window_size, channel, size_average=True):
+        mu1 = F.conv2d(img1, window, padding=window_size // 2, groups=channel)
+        mu2 = F.conv2d(img2, window, padding=window_size // 2, groups=channel)
+
+        mu1_sq = mu1.pow(2)
+        mu2_sq = mu2.pow(2)
+        mu1_mu2 = mu1 * mu2
+
+        sigma1_sq = (
+            F.conv2d(img1 * img1, window, padding=window_size // 2, groups=channel)
+            - mu1_sq
+        )
+        sigma2_sq = (
+            F.conv2d(img2 * img2, window, padding=window_size // 2, groups=channel)
+            - mu2_sq
+        )
+        sigma12 = (
+            F.conv2d(img1 * img2, window, padding=window_size // 2, groups=channel)
+            - mu1_mu2
+        )
+
+        C1 = 0.01**2
+        C2 = 0.03**2
+
+        ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / (
+            (mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2)
+        )
+
+        if size_average:
+            return ssim_map.mean()
+        else:
+            return ssim_map.mean(1).mean(1).mean(1)
 
 
+class SSIMLoss(nn.Module):
+    def __init__(self, window_size=11):
+        super(SSIMLoss, self).__init__()
+        self.ssim_module = SSIM(window_size=window_size)
+
+    def forward(self, img1, img2):
+        return 1 - self.ssim_module(img1, img2)
+
+
+# training_network 関数内での変更
 def training_network(
     model: nn.Module,
     S: torch.Tensor,
@@ -101,24 +145,13 @@ def training_network(
     num_epochs: int,
     learning_rate: float = 1 * 1e-5,
 ) -> Tuple[List[float], np.ndarray]:
-    """
-    Args:
-        model: 訓練するモデル
-        S: スペックル
-        y_observed: 観測されたデータ
-        num_epochs: 訓練エポック数
-        learning_rate: 学習率
-
-    Returns:
-        train_loss_list: 各エポックの訓練損失
-        train_result: 訓練後のモデル出力
-    """
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model.to(device)
     y_observed = y_observed.to(device)
     S = S.to(device)
 
-    criterion = nn.MSELoss()
+    # SSIMLoss をcriterionとして使用
+    criterion = SSIMLoss(window_size=4)  # window_sizeは適宜調整してください
     optimizer = optim.Adam(params=model.parameters(), lr=learning_rate)
 
     loss_list = []
@@ -128,28 +161,29 @@ def training_network(
         optimizer.zero_grad()
 
         reconstructed_x = model(y_observed)
-        # print(f"reconstructed_x shape: {reconstructed_x.shape}")
-        # Sをかけた結果
         out = reconstructed_x.view(-1, reconstructed_x.size(0))
         out = torch.mm(out, S)
         predicted_y = out.view(out.size(1))
-        # predicted_y = torch.mm(reconstructed_x, S.t())
-        loss = criterion(predicted_y, y_observed)
+
+        # 入力を 4D テンソルに変形 (バッチ, チャンネル, 高さ, 幅)
+        predicted_y_4d = predicted_y.view(1, 1, -1, 1)
+        y_observed_4d = y_observed.view(1, 1, -1, 1)
+
+        # SSIM損失の計算
+        loss = criterion(predicted_y_4d, y_observed_4d)
 
         loss.backward()
         optimizer.step()
-
         loss_list.append(loss.item())
-        # wandb.log({"epoch": epoch, "loss": loss.item()})
+        wandb.log({"epoch": epoch, "loss": loss.item()})
         if (epoch + 1) % 100 == 0:
             print(f"Epoch: [{epoch+1}/{num_epochs}], Loss: {loss.item():.6f}")
 
     model.eval()
     with torch.no_grad():
         reconstructed_x = model(y_observed)
-        binary_output = model.get_binary_output(y_observed)
 
-    return loss_list, reconstructed_x, binary_output
+    return loss_list, reconstructed_x
 
 
 def main_train(
@@ -177,11 +211,10 @@ def main_train(
 
     loss_total = []
     reconstructed_total = []
-    binary_total = []
     start_time = time.time()
     for i in range(num_images):
         y_observed = torch.tensor(data_y[i]).float().to(device)
-        loss_list, reconstructed_x, binary_output = training_network(
+        loss_list, reconstructed_x = training_network(
             model,
             S_tensor,
             y_observed,
@@ -190,8 +223,9 @@ def main_train(
         )
         loss_total.append(loss_list)
         reconstructed_total.append(reconstructed_x.cpu().numpy())
-        binary_total.append(binary_output.cpu().numpy())
+
         elapsed_time = time.time() - start_time
+
         wandb.log(
             {"iteration": i + 1, "final_loss": loss_list[-1], "time": elapsed_time}
         )
@@ -199,7 +233,7 @@ def main_train(
         print(
             f"Iteration: {i+1}/{num_images}, Final Loss: {loss_list[-1]:.4f}, Time: {elapsed_time}"
         )
-    return loss_total, reconstructed_total, binary_total
+    return loss_total, reconstructed_total
 
 
 if __name__ == "__main__":
@@ -214,7 +248,7 @@ if __name__ == "__main__":
     パラメータ、データ設定
     """
     # 利用モデル
-    selected_model = Net_version_1()
+    selected_model = Net_version_2()
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
@@ -223,28 +257,22 @@ if __name__ == "__main__":
     # selected_speckle = S
     # 標準化の有無
     normalized = False
-    learning_rate = 5 * 1e-5
+    learning_rate = 1 * 1e-5
     XX, yy = mnist_total()
     # S_norm_stand = standardization(S_norm)
     speckle = S_norm.T
     print(yy.shape)
     print(speckle.shape)
-    # XX_stand = standardization(XX)
-    # yy_stand = standardization(yy)
-    # wandbに設定をログ
-    # wandb.config.update(
-    #     {
-    #         "speckle_alpha": speckle_alpha,
-    #         "num_images": num_images,
-    #         "num_epochs": num_epochs,
-    #         "learning_rate": learning_rate,
-    #         "model": selected_model.get_class_name(),
-    #     }
-    # )
-    """
-    訓練
-    """
-    loss_history, reconstructed_signals, binary_signals = main_train(
+    wandb.config.update(
+        {
+            "speckle_alpha": speckle_alpha,
+            "num_images": num_images,
+            "num_epochs": num_epochs,
+            "learning_rate": learning_rate,
+            "model": selected_model.get_class_name(),
+        }
+    )
+    loss_history, reconstructed_signals = main_train(
         selected_model,
         num_images,
         num_epochs,
@@ -253,22 +281,20 @@ if __name__ == "__main__":
         normalized,
         learning_rate,
     )
+
     print("Training completed.")
     print(f"Final average loss: {np.mean([loss[-1] for loss in loss_history]):.4f}")
     nd_recon = np.array(reconstructed_signals)
-    nd_binary = np.array(binary_signals)
+
     nd_loss = np.array(loss_history)
     # 再構成の精度評価
     mse = mean_squared_error(XX, nd_recon)
-    mse_bin = mean_squared_error(XX, nd_binary)
-    print(f"Average reconstruction MSE: {mse:.4f}, {mse_bin:.4f}")
+    print(f"Average reconstruction MSE: {mse:.4f}")
     print(nd_recon.min(), nd_recon.max())
-    print(nd_binary.min(), nd_binary.max())
     # np.save("data/processed/reconstructed_signals.npy", nd_recon)
     image_display(j=8, xx=XX, yy=nd_recon, size=8)
-    image_display(j=8, xx=XX, yy=nd_binary, size=8)
     # wandbに最終結果をログ
-    # wandb.log(
-    #     {"final_average_loss": np.mean([loss[-1] for loss in loss_history]), "mse": mse}
-    # )
-    # wandb.finish()
+    wandb.log(
+        {"final_average_loss": np.mean([loss[-1] for loss in loss_history]), "mse": mse}
+    )
+    wandb.finish()
