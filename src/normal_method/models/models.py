@@ -20,6 +20,13 @@ wandb.login()
 wandb.init(project="speckle")
 
 
+def standardization(data: np.ndarray) -> np.ndarray:
+    """
+    標準化
+    """
+    return (data - data.mean()) / data.std()
+
+
 class Net_version_1(nn.Module):
     def __init__(self):
         super(Net_version_1, self).__init__()
@@ -145,7 +152,7 @@ if __name__ == "__main__":
     ### スペックル切り替え
     lambda1 = 10
     lambda2 = 10
-    speckle_alpha = 3
+    speckle_alpha = 1
     # S_org = Original_pred(lambda1=lambda1, lambda2=lambda2)
     S_norm = speckle_noise_calculation(S_hd, alpha=speckle_alpha)
     """
@@ -156,16 +163,19 @@ if __name__ == "__main__":
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 20000
+    num_epochs = 10000
     # 利用スペックル
     # selected_speckle = S
     # 標準化の有無
     normalized = False
     learning_rate = 5 * 1e-5
     XX, yy = mnist_total()
-    speckle = S_norm.T
+    S_norm_stand = standardization(S_norm)
+    speckle = S_norm_stand.T
     print(yy.shape)
     print(speckle.shape)
+    XX_stand = standardization(XX)
+    yy_stand = standardization(yy)
     # wandbに設定をログ
     wandb.config.update(
         {
@@ -183,7 +193,7 @@ if __name__ == "__main__":
         selected_model,
         num_images,
         num_epochs,
-        yy,
+        yy_stand,
         speckle,
         normalized,
         learning_rate,
@@ -193,10 +203,11 @@ if __name__ == "__main__":
     nd_recon = np.array(reconstructed_signals)
     nd_loss = np.array(loss_history)
     # 再構成の精度評価
-    mse = mean_squared_error(XX, nd_recon)
+    mse = mean_squared_error(XX_stand, nd_recon)
     print(f"Average reconstruction MSE: {mse:.4f}")
     print(nd_recon.min(), nd_recon.max())
-    image_display(j=8, xx=XX, yy=nd_recon, size=8)
+    np.save("data/processed/reconstructed_signals.npy", nd_recon)
+    image_display(j=8, xx=XX_stand, yy=nd_recon, size=8)
     # wandbに最終結果をログ
     wandb.log(
         {"final_average_loss": np.mean([loss[-1] for loss in loss_history]), "mse": mse}
