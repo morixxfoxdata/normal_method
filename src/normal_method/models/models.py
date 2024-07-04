@@ -147,9 +147,8 @@ def training_network(
     model.eval()
     with torch.no_grad():
         reconstructed_x = model(y_observed)
-        binary_output = model.get_binary_output(y_observed)
 
-    return loss_list, reconstructed_x, binary_output
+    return loss_list, reconstructed_x
 
 
 def main_train(
@@ -177,11 +176,10 @@ def main_train(
 
     loss_total = []
     reconstructed_total = []
-    binary_total = []
     start_time = time.time()
     for i in range(num_images):
         y_observed = torch.tensor(data_y[i]).float().to(device)
-        loss_list, reconstructed_x, binary_output = training_network(
+        loss_list, reconstructed_x = training_network(
             model,
             S_tensor,
             y_observed,
@@ -190,7 +188,6 @@ def main_train(
         )
         loss_total.append(loss_list)
         reconstructed_total.append(reconstructed_x.cpu().numpy())
-        binary_total.append(binary_output.cpu().numpy())
         elapsed_time = time.time() - start_time
         wandb.log(
             {"iteration": i + 1, "final_loss": loss_list[-1], "time": elapsed_time}
@@ -199,7 +196,7 @@ def main_train(
         print(
             f"Iteration: {i+1}/{num_images}, Final Loss: {loss_list[-1]:.4f}, Time: {elapsed_time}"
         )
-    return loss_total, reconstructed_total, binary_total
+    return loss_total, reconstructed_total
 
 
 if __name__ == "__main__":
@@ -244,7 +241,7 @@ if __name__ == "__main__":
     """
     訓練
     """
-    loss_history, reconstructed_signals, binary_signals = main_train(
+    loss_history, reconstructed_signals = main_train(
         selected_model,
         num_images,
         num_epochs,
@@ -256,7 +253,6 @@ if __name__ == "__main__":
     print("Training completed.")
     print(f"Final average loss: {np.mean([loss[-1] for loss in loss_history]):.4f}")
     nd_recon = np.array(reconstructed_signals)
-    nd_binary = np.array(binary_signals)
     nd_loss = np.array(loss_history)
     # 再構成の精度評価
     mse = mean_squared_error(XX, nd_recon)
@@ -266,9 +262,8 @@ if __name__ == "__main__":
     # print(nd_binary.min(), nd_binary.max())
     # np.save("data/processed/reconstructed_signals.npy", nd_recon)
     image_display(j=8, xx=XX, yy=nd_recon, size=8)
-    # image_display(j=8, xx=XX, yy=nd_binary, size=8)
     # wandbに最終結果をログ
-    # wandb.log(
-    #     {"final_average_loss": np.mean([loss[-1] for loss in loss_history]), "mse": mse}
-    # )
-    # wandb.finish()
+    wandb.log(
+        {"final_average_loss": np.mean([loss[-1] for loss in loss_history]), "mse": mse}
+    )
+    wandb.finish()
