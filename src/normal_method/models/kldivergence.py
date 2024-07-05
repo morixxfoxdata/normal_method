@@ -137,6 +137,50 @@ class SSIMLoss(nn.Module):
         return 1 - self.ssim_module(img1, img2)
 
 
+class OptimizedDifferentiableMutualInformationLoss(nn.Module):
+    def __init__(self, sigma=0.1, num_samples=1000):
+        super().__init__()
+        self.sigma = sigma
+        self.num_samples = num_samples
+
+    def gaussian_kernel(self, x, y):
+        dist = torch.cdist(x, y, p=2)
+        return torch.exp(-(dist**2) / (2 * self.sigma**2))
+
+    def kde_entropy(self, x):
+        batch_size = x.size(0)
+        if batch_size > self.num_samples:
+            # Random sampling if batch size is too large
+            idx = torch.randperm(batch_size)[: self.num_samples]
+            x = x[idx]
+            batch_size = self.num_samples
+
+        kernel_matrix = self.gaussian_kernel(x, x)
+        kernel_sum = (torch.sum(kernel_matrix, dim=1) - 1) / (
+            batch_size - 1
+        )  # Exclude self
+        return -torch.mean(torch.log(kernel_sum + 1e-8))
+
+    def forward(self, predicted_y, y_observed):
+        # Ensure inputs are float tensors and reshape
+        predicted_y = predicted_y.float().view(-1, 1)
+        y_observed = y_observed.float().view(-1, 1)
+
+        # Combine inputs
+        joint = torch.cat([y_observed, predicted_y], dim=1)
+
+        # Compute entropies
+        h_joint = self.kde_entropy(joint)
+        h_y = self.kde_entropy(y_observed)
+        h_pred_y = self.kde_entropy(predicted_y)
+
+        # Compute mutual information
+        mi = h_y + h_pred_y - h_joint
+
+        # Return negative MI as we want to maximize it
+        return -mi
+
+
 # training_network 関数内での変更
 def training_network(
     model: nn.Module,
@@ -151,7 +195,10 @@ def training_network(
     S = S.to(device)
 
     # SSIMLoss をcriterionとして使用
-    criterion = SSIMLoss(window_size=4)  # window_sizeは適宜調整してください
+    # criterion = SSIMLoss(window_size=4)  # window_sizeは適宜調整してください
+    criterion = OptimizedDifferentiableMutualInformationLoss(
+        sigma=0.1, num_samples=1000
+    )
     optimizer = optim.Adam(params=model.parameters(), lr=learning_rate)
 
     loss_list = []
@@ -165,12 +212,7 @@ def training_network(
         out = torch.mm(out, S)
         predicted_y = out.view(out.size(1))
 
-        # 入力を 4D テンソルに変形 (バッチ, チャンネル, 高さ, 幅)
-        predicted_y_4d = predicted_y.view(1, 1, -1, 1)
-        y_observed_4d = y_observed.view(1, 1, -1, 1)
-
-        # SSIM損失の計算
-        loss = criterion(predicted_y_4d, y_observed_4d)
+        loss = criterion(predicted_y, y_observed)
 
         loss.backward()
         optimizer.step()
@@ -252,7 +294,7 @@ if __name__ == "__main__":
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 10000
+    num_epochs = 1000
     # 利用スペックル
     # selected_speckle = S
     # 標準化の有無

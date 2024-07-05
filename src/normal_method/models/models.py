@@ -133,6 +133,8 @@ def training_network(
         out = reconstructed_x.view(-1, reconstructed_x.size(0))
         out = torch.mm(out, S)
         predicted_y = out.view(out.size(1))
+        print(f"predicted_y shape: {predicted_y.shape}")
+        print(f"y_observed shape: {y_observed.shape}")
         # predicted_y = torch.mm(reconstructed_x, S.t())
         loss = criterion(predicted_y, y_observed)
 
@@ -211,11 +213,11 @@ if __name__ == "__main__":
     パラメータ、データ設定
     """
     # 利用モデル
-    selected_model = Net_version_2()
+    selected_model = Net_version_1()
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 10000
+    num_epochs = 100
     # 利用スペックル
     # selected_speckle = S
     # 標準化の有無
