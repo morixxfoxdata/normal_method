@@ -7,134 +7,61 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.metrics import mean_squared_error
 
-# import wandb
 from src.normal_method.data import mnist_total
-
-# 先ほど定義したSSIMクラスをインポートしたと仮定します
-# from src.normal_method.models.ssim_model import SSIM
 from src.normal_method.speckle.prediction import (
     inv_hadamard,
     speckle_noise_calculation,
 )
 from src.normal_method.visualization.display import image_display
 
-# wandb.login()
 
-# wandb.init(project="speckle")
-
-
-def mse(x, y):
-    return np.mean((x - y) ** 2)
-
-
-def psnr(x, y, data_range=2):  # data_range is 2 for [-1, 1] range
-    mse_val = mse(x, y)
-    return 20 * np.log10(data_range / np.sqrt(mse_val))
-
-
-def standardization(data: np.ndarray) -> np.ndarray:
-    """
-    標準化
-    """
-    return (data - data.mean()) / data.std()
-
-
-class Net_version_1(nn.Module):
+class Net_cnn_ver1(nn.Module):
     def __init__(self):
-        super(Net_version_1, self).__init__()
-        self.fc1 = nn.Linear(500, 250)
-        self.fc2 = nn.Linear(250, 64)
+        super(Net_cnn_ver1, self).__init__()
 
-    def forward(self, x):
-        x = torch.tanh(self.fc1(x))
-        x = torch.tanh(self.fc2(x))
-        return x
-
-    def get_class_name(self):
-        return self.__class__.__name__
-
-
-class Net_version_2(nn.Module):
-    def __init__(self):
-        super(Net_version_2, self).__init__()
-        self.fc1 = nn.Linear(500, 250)
-        self.fc2 = nn.Linear(250, 128)
-        self.fc3 = nn.Linear(128, 64)
-
-    def forward(self, x):
-        x = torch.tanh(self.fc1(x))
-        x = torch.tanh(self.fc2(x))
-        x = torch.tanh(self.fc3(x))
-        return x
-
-    def get_class_name(self):
-        return self.__class__.__name__
-
-
-class Net_version_3(nn.Module):
-    def __init__(self):
-        super(Net_version_3, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(500, 256),
+        self.conv_layers = nn.Sequential(
+            nn.Conv1d(1, 32, kernel_size=5, stride=1, padding=1),
             nn.ReLU(),
-            nn.Linear(256, 128),
+            nn.MaxPool1d(kernel_size=2, stride=2),
+            nn.Conv1d(32, 64, kernel_size=5, stride=1, padding=1),
             nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),
         )
-        self.decoder = nn.Sequential(nn.Linear(128, 256), nn.ReLU(), nn.Linear(256, 64))
-
-    def forward(self, x):
-        encoded = self.encoder(x)
-        logits = self.decoder(encoded)
-        return logits
-
-    def get_binary_output(self, x):
-        logits = self(x)
-        return torch.sign(logits)  # -1 または 1 を返す
-
-    def get_class_name(self):
-        return self.__class__.__name__
-
-
-class Net_version_4(nn.Module):
-    def __init__(self):
-        super(Net_version_4, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(500, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
+        self.fc_layers = nn.Sequential(
+            nn.Linear(64 * 123, 256), nn.Tanh(), nn.Linear(256, 64), nn.Tanh()
         )
-        self.decoder = nn.Sequential(
-            nn.Linear(128, 256),
+
+
+class Net_cnn_ver2(nn.Module):
+    def __init__(self):
+        super(Net_cnn_ver2, self).__init__()
+
+        self.conv_layers = nn.Sequential(
+            nn.Conv1d(1, 32, kernel_size=4, stride=1, padding=1),
             nn.ReLU(),
-            nn.Linear(256, 64),
-            nn.Tanh(),
+            nn.MaxPool1d(kernel_size=2, stride=2),
+            nn.Conv1d(32, 64, kernel_size=4, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),
+        )
+        self.fc_layers = nn.Sequential(
+            nn.Linear(64 * 124, 256), nn.Tanh(), nn.Linear(256, 64), nn.Tanh()
         )
 
     def forward(self, x):
-        encoded = self.encoder(x)
-        reconstructed = self.decoder(encoded)
-        return reconstructed
+        # Input x has shape (500,)
+        x = x.unsqueeze(0).unsqueeze(0)  # Shape becomes (1, 1, 500)
 
-    def get_class_name(self):
-        return self.__class__.__name__
+        # Apply convolutional layers
+        x = self.conv_layers(x)
 
+        # Flatten the output
+        x = x.view(1, -1)
 
-class Net_version_5(nn.Module):
-    def __init__(self):
-        super(Net_version_5, self).__init__()
-        self.fc1 = nn.Linear(500, 250)
-        self.fc2 = nn.Linear(250, 64)
+        # Apply fully connected layers
+        x = self.fc_layers(x)
 
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.tanh(self.fc2(x))
-        return x
-
-
-class Net_version_6(nn.Module):
-    def __init__(self):
-        super(Net_version_6, self).__init__()
+        return x.squeeze(0)  # Output shape: (64,)
 
 
 def training_network(
@@ -160,35 +87,24 @@ def training_network(
     model.to(device)
     y_observed = y_observed.to(device)
     S = S.to(device)
-
     criterion = nn.MSELoss()
     optimizer = optim.Adam(params=model.parameters(), lr=learning_rate)
 
     loss_list = []
-
     for epoch in range(num_epochs):
         model.train()
         optimizer.zero_grad()
-
         reconstructed_x = model(y_observed)
-        # print(f"reconstructed_x shape: {reconstructed_x.shape}")
-        # Sをかけた結果
         out = reconstructed_x.view(-1, reconstructed_x.size(0))
         out = torch.mm(out, S)
         predicted_y = out.view(out.size(1))
-        # print(f"predicted_y shape: {predicted_y.shape}")
-        # print(f"y_observed shape: {y_observed.shape}")
-        # predicted_y = torch.mm(reconstructed_x, S.t())
         loss = criterion(predicted_y, y_observed)
-
         loss.backward()
         optimizer.step()
 
         loss_list.append(loss.item())
-        # wandb.log({"epoch": epoch, "loss": loss.item()})
         if (epoch + 1) % 100 == 0:
             print(f"Epoch: [{epoch+1}/{num_epochs}], Loss: {loss.item():.6f}")
-
     model.eval()
     with torch.no_grad():
         reconstructed_x = model(y_observed)
@@ -256,36 +172,22 @@ if __name__ == "__main__":
     パラメータ、データ設定
     """
     # 利用モデル
-    selected_model = Net_version_1()
+    selected_model = Net_cnn_ver2()
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 1000
+    num_epochs = 10000
     # 利用スペックル
     # selected_speckle = S
     # 標準化の有無
     normalized = False
-    learning_rate = 1 * 1e-5
+    learning_rate = 2 * 1e-5
     XX, yy = mnist_total()
     # S_norm_stand = standardization(S_norm)
     speckle = S_norm.T
-    print(yy.shape)
-    print(speckle.shape)
-    # XX_stand = standardization(XX)
-    # yy_stand = standardization(yy)
-    # wandbに設定をログ
-    # wandb.config.update(
-    #     {
-    #         "speckle_alpha": speckle_alpha,
-    #         "num_images": num_images,
-    #         "num_epochs": num_epochs,
-    #         "learning_rate": learning_rate,
-    #         "model": selected_model.get_class_name(),
-    #     }
-    # )
-    """
-    訓練
-    """
+    print("input shape:", yy.shape)
+    print("Speckle shape:", speckle.shape)
+    print("output shape:", XX.shape)
     loss_history, reconstructed_signals = main_train(
         selected_model,
         num_images,
@@ -301,16 +203,6 @@ if __name__ == "__main__":
     nd_loss = np.array(loss_history)
     # 再構成の精度評価
     mse_val = mean_squared_error(XX, nd_recon)
-    psnr_val = psnr(XX, nd_recon)
-    # mse_bin = mean_squared_error(XX, nd_binary)
     print(f"Average reconstruction MSE: {mse_val:.4f}")
-    print(f"Average PSNR: {psnr_val:.4f}")
-    print(nd_recon.min(), nd_recon.max())
-    # print(nd_binary.min(), nd_binary.max())
-    # np.save("data/processed/reconstructed_signals.npy", nd_recon)
+    print(f"Min value:{nd_recon.min()}, Max value:{nd_recon.max()}")
     image_display(j=8, xx=XX, yy=nd_recon, size=8)
-    # wandbに最終結果をログ
-    # wandb.log(
-    #     {"final_average_loss": np.mean([loss[-1] for loss in loss_history]), "mse": mse}
-    # )
-    # wandb.finish()
