@@ -31,6 +31,21 @@ class Net_cnn_ver1(nn.Module):
             nn.Linear(64 * 123, 256), nn.Tanh(), nn.Linear(256, 64), nn.Tanh()
         )
 
+    def forward(self, x):
+        # Input x has shape (500,)
+        x = x.unsqueeze(0).unsqueeze(0)  # Shape becomes (1, 1, 500)
+
+        # Apply convolutional layers
+        x = self.conv_layers(x)
+
+        # Flatten the output
+        x = x.view(1, -1)
+
+        # Apply fully connected layers
+        x = self.fc_layers(x)
+
+        return x.squeeze(0)  # Output shape: (64,)
+
 
 class Net_cnn_ver2(nn.Module):
     def __init__(self):
@@ -62,6 +77,44 @@ class Net_cnn_ver2(nn.Module):
         x = self.fc_layers(x)
 
         return x.squeeze(0)  # Output shape: (64,)
+
+
+class Net_rnn_ver1(nn.Module):
+    def __init__(self, input_size=1, hidden_size=64, num_layers=2, output_size=64):
+        super(Net_rnn_ver1, self).__init__()
+
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        # LSTM layers
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+
+        # Fully connected layer for output
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, 128),
+            nn.Tanh(),
+            nn.Linear(128, output_size),
+            nn.Tanh(),
+        )
+
+    def forward(self, x):
+        # Input x has shape (500,)
+        x = x.unsqueeze(0).unsqueeze(2)  # Shape becomes (1, 500, 1)
+
+        # Initialize hidden state with zeros
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+
+        # Forward propagate LSTM
+        out, _ = self.lstm(x, (h0, c0))  # out: tensor of shape (1, 500, hidden_size)
+
+        # Decode the hidden state of the last time step
+        out = out[:, -1, :]
+
+        # Pass through the fully connected layers
+        out = self.fc(out)
+
+        return out.squeeze(0)  # Output shape: (64,)
 
 
 def training_network(
@@ -172,16 +225,16 @@ if __name__ == "__main__":
     パラメータ、データ設定
     """
     # 利用モデル
-    selected_model = Net_cnn_ver2()
+    selected_model = Net_rnn_ver1()
     # 学習画像枚数
     num_images = 10
     # 画像ごとのエポック数
-    num_epochs = 10000
+    num_epochs = 1000
     # 利用スペックル
     # selected_speckle = S
     # 標準化の有無
     normalized = False
-    learning_rate = 2 * 1e-5
+    learning_rate = 1 * 1e-5
     XX, yy = mnist_total()
     # S_norm_stand = standardization(S_norm)
     speckle = S_norm.T
